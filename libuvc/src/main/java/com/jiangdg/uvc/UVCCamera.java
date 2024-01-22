@@ -939,6 +939,40 @@ public class UVCCamera {
     }
 
 //================================================================================
+	/**
+	 * @param backlight [%]
+	 */
+	public synchronized void setBacklight(final int backlight) {
+		if (mNativePtr != 0) {
+			final float range = Math.abs(mBacklightCompMax - mBacklightCompMin);
+			if (range > 0)
+				nativeSetBacklightComp(mNativePtr, (int)(backlight / 100.f * range) + mBacklightCompMin);
+		}
+	}
+
+	public synchronized int getBacklight(final int backlight_abs) {
+		int result = 0;
+		if (mNativePtr != 0) {
+			nativeUpdateBacklightCompLimit(mNativePtr);
+			final float range = Math.abs(mBacklightCompMax - mBacklightCompMin);
+			if (range > 0) {
+				result = (int)((backlight_abs - mBacklightCompMin) * 100.f / range);
+			}
+		}
+		return result;
+	}
+
+	public synchronized int getBacklight() {
+		return getBacklight(nativeGetBacklightComp(mNativePtr));
+	}
+
+	public synchronized void resetBacklight() {
+		if (mNativePtr != 0) {
+			nativeSetBacklightComp(mNativePtr, mBacklightCompDef);
+		}
+	}
+
+//================================================================================
 
 	/** Command camera
 	 *
