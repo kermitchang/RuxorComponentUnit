@@ -12,7 +12,6 @@ import android.media.ImageReader
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
-import android.os.Message
 import android.util.Log
 import android.util.Size
 import androidx.annotation.RequiresApi
@@ -165,8 +164,6 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 this.uvcCamera?.setPreviewDisplay(this@KUVCCameraSource.imageReader?.get()?.surface)
                 this.uvcCamera?.startPreview()
                 this.uvcCamera?.updateCameraParams()
-                this.autoFocus = false
-                this.autoWhiteBalance = true
             } catch (e: Exception) {
                 Log.e(TAG,"Open camera error $e")
             }
@@ -271,6 +268,15 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
             }
         }
 
+    var contrast = this.uvcCamera?.contrast
+        get() = this.uvcCamera?.contrast
+        set(value) {
+            field = value
+            value?.let {
+                this.uvcCamera?.contrast = value
+            }
+        }
+
     var focus = this.uvcCamera?.focus
         get() = this.uvcCamera?.focus
         set(value) {
@@ -316,6 +322,15 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
             }
         }
 
+    var sharpness = this.uvcCamera?.sharpness
+        get() = this.uvcCamera?.sharpness
+        set(value) {
+            field = value
+            value?.let {
+                this.uvcCamera?.sharpness = value
+            }
+        }
+
     var whiteBlance = this.uvcCamera?.whiteBlance
         get() = this.uvcCamera?.whiteBlance
         set(value) {
@@ -333,13 +348,6 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 this.uvcCamera?.zoom = value
             }
         }
-
-    public fun getImageBuffer(): ByteArray? {
-        synchronized(this.byteBufferStreamList) {
-            val listSize: Int = this.byteBufferStreamList.size
-            return if (listSize == 0) null else this.byteBufferStreamList[listSize - 1]
-        }
-    }
 
     private fun getUVCDevice(): UsbDevice? {
         this.usbManager.deviceList.values.forEach { usbDevice ->
@@ -373,6 +381,46 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
         }
     }
 
+    public fun resetBrightness() {
+        this.uvcCamera?.resetBrightness()
+    }
+
+    public fun resetContrast() {
+        this.uvcCamera?.resetContrast()
+    }
+
+    public fun resetFocus() {
+        this.uvcCamera?.resetFocus()
+    }
+
+    public fun resetGain() {
+        this.uvcCamera?.resetGain()
+    }
+
+    public fun resetGamma() {
+        this.uvcCamera?.resetGamma()
+    }
+
+    public fun resetHue() {
+        this.uvcCamera?.resetHue()
+    }
+
+    public fun resetSaturation() {
+        this.uvcCamera?.resetSaturation()
+    }
+
+    public fun resetSharpness() {
+        this.uvcCamera?.resetSharpness()
+    }
+
+    public fun resetWhiteBlance() {
+        this.uvcCamera?.resetWhiteBlance()
+    }
+
+    public fun resetZoom() {
+        this.uvcCamera?.resetZoom()
+    }
+
     public fun setPreviewSize(width:Int, height:Int) {
         this.previewSize = Size(width, height)
     }
@@ -387,14 +435,14 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    public fun startRecordingVideo(fileName: String) {
+    public fun startRecord(fileName: String) {
         Log.d(TAG, "Kermit startRecordingVideo")
         this.closeUVCCamera()
         this.connectRecorderUVCCamera(fileName)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    fun stopRecordingVideo() {
+    fun stopRecord() {
         Log.d(TAG, "Kermit stopRecordingVideo")
         try {
             this.mediaRecorder?.pause()
