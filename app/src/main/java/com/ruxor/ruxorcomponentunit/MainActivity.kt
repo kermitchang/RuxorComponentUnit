@@ -10,9 +10,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.ruxor.ruxorcomponentunit.component.camera.KCameraSource
+import com.ruxor.ruxorcomponentunit.component.camera.KUVCCameraSource
+import com.ruxor.ruxorcomponentunit.component.permission.KPermissionImpl
 import com.ruxor.ruxorcomponentunit.ui.theme.RuxorComponentUnitTheme
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -26,6 +30,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
     }
 }
 

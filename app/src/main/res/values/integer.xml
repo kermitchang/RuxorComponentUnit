@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer name="viewflipper_animation_duration">1000</integer>
+    <integer name="delay_animation_duration">200</integer>
+    <integer name="logitech_c615_vendor_id">1133</integer>
+    <integer name="logitech_c615_product_id">2092</integer>
+    <integer name="shenzhen_cam_vendor_id">11391</integer>
+    <integer name="shenzhen_cam_product_id">19040</integer>
+    <integer name="sonix_cam_vendor_id">3141</integer>
+    <integer name="sonix_cam_product_id">25440</integer>
+    <integer name="pal_cam_rgb_vendor_id">11134</integer>
+    <integer name="pal_cam_rgb_product_id">22650</integer>
+    <integer name="pal_cam_ir_vendor_id">11134</integer>
+    <integer name="pal_cam_ir_product_id">22651</integer>
+</resources>

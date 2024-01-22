@@ -14,7 +14,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Message
 import android.util.Log
-import com.ruxor.ruxorcomponentunit.component.PermissionImpl
+import com.ruxor.ruxorcomponentunit.component.permission.KPermissionImpl
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -37,8 +37,8 @@ class RuxorBluetoothImpl(context:Context, activity: Activity) {
     private val context: Context = context
     private val bluetoothManager: BluetoothManager = this.context.getSystemService(BluetoothManager::class.java)
     private val bluetoothAdapter: BluetoothAdapter = this.bluetoothManager.adapter
-    private val permissionImpl: PermissionImpl by lazy {
-        PermissionImpl(this.context, this.activity)
+    private val permissionImpl: KPermissionImpl by lazy {
+        KPermissionImpl(this.context, this.activity)
     }
     private var ruxorBluetoothListener: RuxorBluetoothListener?= null
     private var targetDeviceName:String? = null
@@ -101,7 +101,7 @@ class RuxorBluetoothImpl(context:Context, activity: Activity) {
                         Log.d(this@RuxorBluetoothImpl.TAG,"Kermit onReceive -> deviceName:${device.name}, deviceHardwareAddress:${device.address}")
                         if (device.name == this@RuxorBluetoothImpl.targetDeviceName || device.address == this@RuxorBluetoothImpl.targetDeviceAddress) {
                             this@RuxorBluetoothImpl.permissionImpl.checkPermission(arrayOf<String>(
-                                PermissionImpl.BLUETOOTH_CONNECT))
+                                KPermissionImpl.BLUETOOTH_CONNECT))
                             this@RuxorBluetoothImpl.connect(device)
                         }
                     }
@@ -111,7 +111,7 @@ class RuxorBluetoothImpl(context:Context, activity: Activity) {
     }
 
     private fun connect(device: BluetoothDevice) {
-        this.permissionImpl.checkPermission(arrayOf(PermissionImpl.BLUETOOTH_SCAN))
+        this.permissionImpl.checkPermission(arrayOf(KPermissionImpl.BLUETOOTH_SCAN))
         if (this.bluetoothAdapter.isDiscovering) {
             this.bluetoothAdapter.cancelDiscovery()
         }
@@ -138,7 +138,7 @@ class RuxorBluetoothImpl(context:Context, activity: Activity) {
 
     private fun getBondedDevices(): Set<BluetoothDevice> {
         Log.d(TAG, "Kermit getBondedDevices")
-        this.permissionImpl.checkPermission(arrayOf<String>(PermissionImpl.BLUETOOTH_SCAN, PermissionImpl.BLUETOOTH_CONNECT))
+        this.permissionImpl.checkPermission(arrayOf<String>(KPermissionImpl.BLUETOOTH_SCAN, KPermissionImpl.BLUETOOTH_CONNECT))
         return bluetoothAdapter.bondedDevices
     }
 
@@ -153,7 +153,7 @@ class RuxorBluetoothImpl(context:Context, activity: Activity) {
         this.acceptThread?.cancel()
         this.connectThread?.cancel()
         this.connectedThread?.cancel()
-        this.permissionImpl.checkPermission(arrayOf<String>(PermissionImpl.BLUETOOTH_SCAN))
+        this.permissionImpl.checkPermission(arrayOf<String>(KPermissionImpl.BLUETOOTH_SCAN))
         if (this.bluetoothAdapter.isDiscovering)
             this.bluetoothAdapter.cancelDiscovery()
         try {
@@ -172,7 +172,7 @@ class RuxorBluetoothImpl(context:Context, activity: Activity) {
             e.printStackTrace()
         }
 
-        this.permissionImpl.checkPermission(arrayOf<String>(PermissionImpl.ACCESS_FINE_LOCATION, PermissionImpl.ACCESS_COARSE_LOCATION, PermissionImpl.BLUETOOTH_SCAN))
+        this.permissionImpl.checkPermission(arrayOf<String>(KPermissionImpl.ACCESS_FINE_LOCATION, KPermissionImpl.ACCESS_COARSE_LOCATION, KPermissionImpl.BLUETOOTH_SCAN))
         if (this.bluetoothAdapter.isDiscovering)
             this.bluetoothAdapter.cancelDiscovery()
         this.bluetoothAdapter.startDiscovery()
@@ -189,7 +189,7 @@ class RuxorBluetoothImpl(context:Context, activity: Activity) {
     init {
         if (!this.bluetoothAdapter.isEnabled) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            this.permissionImpl.checkPermission(arrayOf<String>(PermissionImpl.BLUETOOTH_CONNECT))
+            this.permissionImpl.checkPermission(arrayOf<String>(KPermissionImpl.BLUETOOTH_CONNECT))
             this.activity.startActivityForResult(enableBtIntent, this.REQUEST_ENABLE_BT)
         }
     }
@@ -199,7 +199,7 @@ class RuxorBluetoothImpl(context:Context, activity: Activity) {
         private var serverSocket: BluetoothServerSocket? = null
 
         override fun run() {
-            this@RuxorBluetoothImpl.permissionImpl.checkPermission(arrayOf(PermissionImpl.BLUETOOTH_CONNECT))
+            this@RuxorBluetoothImpl.permissionImpl.checkPermission(arrayOf(KPermissionImpl.BLUETOOTH_CONNECT))
             this.serverSocket = this@RuxorBluetoothImpl.bluetoothAdapter.listenUsingInsecureRfcommWithServiceRecord(this@RuxorBluetoothImpl.DEVICE_NAME, UUID.fromString(this@RuxorBluetoothImpl.DEVICE_UUID))
 
             var shouldLoop = true
@@ -241,7 +241,7 @@ class RuxorBluetoothImpl(context:Context, activity: Activity) {
         private var isLoop = true
 
         public override fun run() {
-            this@RuxorBluetoothImpl.permissionImpl.checkPermission(arrayOf<String>(PermissionImpl.BLUETOOTH_SCAN))
+            this@RuxorBluetoothImpl.permissionImpl.checkPermission(arrayOf<String>(KPermissionImpl.BLUETOOTH_SCAN))
             if (this@RuxorBluetoothImpl.bluetoothAdapter.isDiscovering) {
                 this@RuxorBluetoothImpl.bluetoothAdapter.cancelDiscovery()
             }
