@@ -10,44 +10,70 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.media.ImageReader
 import android.media.MediaRecorder
-import android.os.Build
+import android.os.Environment
 import android.os.Handler
+import android.os.StatFs
 import android.util.Log
 import android.util.Size
-import androidx.annotation.RequiresApi
 import com.jiangdg.usb.DeviceFilter
 import com.jiangdg.usb.USBMonitor
+import com.jiangdg.uvc.IButtonCallback
 import com.jiangdg.uvc.IFrameCallback
+import com.jiangdg.uvc.IStatusCallback
 import com.jiangdg.uvc.UVCCamera
 import com.ruxor.ruxorcomponentunit.R
 import com.ruxor.ruxorcomponentunit.component.KBaseObject
+import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.text.SimpleDateFormat
+import java.util.Calendar
 
 class KUVCCameraSource(private val context: Context) : KBaseObject() {
+
+    companion object {
+        public val UVC_AUTO_EXPOSURE_MODE_MANUAL = 1
+        public val UVC_AUTO_EXPOSURE_MODE_AUTO = 2
+        public val UVC_AUTO_EXPOSURE_MODE_SHUTTER_PRIORITY = 4
+        public val UVC_AUTO_EXPOSURE_MODE_APERTURE_PRIORITY = 8
+    }
 
     private val ACTION_USB_PERMISSION = "ACTION.USB_PERMISSION"
     private val DEFAULT_CAMERA_HEIGHT = 1080
     private val DEFAULT_CAMERA_WIDTH = 1920
+    private val DEFAULT_FREE_SPACE_PERCENT = 0.2
+    private val DEFAULT_RECORD_DURATION = (15 * 60 * 1000).toInt()
     private val MAX_FPS = 60
     private val MIN_FPS = 1
 
+    private var autoRecord = false
     private var backgroundHandler: Handler? = null
     private var byteBufferStreamList =  mutableListOf<ByteArray>()
     private var cameraIndex : Int ?= null
+    private var isVideoRecording = false
     private var imageReader: KCameraAutoCloseable<ImageReader>? = null
     private var kCameraCallback: KCameraCallback ?= null
     private var mediaRecorder: MediaRecorder? = null
+    private var mediaRecordOrientation = KMediaRecordOrientationType.ORIENTATION_0
     private var previewSize = Size(this.DEFAULT_CAMERA_WIDTH, this.DEFAULT_CAMERA_HEIGHT)
     private var productId = this.context.resources.getInteger(R.integer.logitech_c615_product_id)
+    private var recordDuration = this.DEFAULT_RECORD_DURATION
+    private var storageSpacePercent = this.DEFAULT_FREE_SPACE_PERCENT
     private var usbCameraDevice:UsbDevice ?= null
     private var usbControlBlock: USBMonitor.UsbControlBlock? = null
+    private var usbDevice: UsbDevice ?= null
     private val usbManager: UsbManager = this.context.getSystemService(Context.USB_SERVICE) as UsbManager
     private val usbMonitor: USBMonitor by lazy {
         USBMonitor(this.context, this.usbMonitorListener)
     }
     private var uvcCamera: UVCCamera?= null
     private var vendorId = this.context.resources.getInteger(R.integer.logitech_c615_vendor_id)
+    private var videoRecordPath = "/storage/emulated/0/FaceAI/Video"
 
+    private val iButtonCallback = IButtonCallback { button, state ->
+        //Log.d(TAG,"ButtonCallback -> button:$button state:$state")
+    }
     private val iFrameCallback = IFrameCallback { byteBuffer ->
 //        Log.d(TAG,"Buffer size: ${byteBuffer?.capacity()}")
 
@@ -67,6 +93,27 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
     private val imageReaderAvailable = ImageReader.OnImageAvailableListener { imageReader ->
         val image = imageReader.acquireLatestImage()
         image?.close()
+    }
+    private val iStateCallback = IStatusCallback { statusClass, event, selector, statusAttribute, data ->
+        //Log.d(TAG,"StateCallback -> statusClass:$statusClass, event:$event, selector:$selector, statusAttribute:$statusAttribute, data:$data")
+    }
+    private val mediaRecorderInfoList = MediaRecorder.OnInfoListener { mediaRecorder, what, extra ->
+        Log.w(TAG,"Media Recorder Info List what:$what, extra:$extra")
+        if ( what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED ) {
+            Log.d(TAG,"OnInfoListener MEDIA_RECORDER_INFO_MAX_DURATION_REACHED")
+            if (this@KUVCCameraSource.checkStorageSpace()) {
+                this@KUVCCameraSource.waitRecording()
+                Handler().postDelayed({
+                    this@KUVCCameraSource.initialMediaRecord()
+                    this@KUVCCameraSource.startRecording()
+                }, 1000)
+            }
+            else
+                this@KUVCCameraSource.stopRecordVideo()
+        }
+    }
+    private val mediaRecorderErrorList = MediaRecorder.OnErrorListener { mediaRecorder, what, extra ->
+        Log.w(TAG,"MediaRecorderErrorList what:$what, extra:$extra")
     }
     private val usbMonitorListener = object : USBMonitor.OnDeviceConnectListener {
         override fun onAttach(device: UsbDevice?) {
@@ -105,138 +152,6 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                         }
                     }
                 }
-            }
-        }
-    }
-
-    private fun checkUVCCameraPermission() {
-        if (this.usbCameraDevice == null) {
-            Log.e(TAG,"Can't not find UVCCamera on usb device list")
-            return
-        }
-
-        this.context.registerReceiver(this.usbPermissionBroadReceiver, IntentFilter(this.ACTION_USB_PERMISSION))
-        val pendingIntent = PendingIntent.getBroadcast(this.context, 0, Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_MUTABLE)
-        this.usbManager.requestPermission(this.usbCameraDevice, pendingIntent)
-    }
-
-    public fun closeUVCCamera() {
-        this.byteBufferStreamList.clear()
-        this.uvcCamera?.close()
-    }
-
-    private fun connectUVCCamera() {
-        Log.d(TAG,"Connect to the UVC Camera")
-
-        this.usbMonitor.setDeviceFilter(DeviceFilter(this.usbCameraDevice))
-
-        this.usbMonitor.deviceList.forEachIndexed { index, usbDevice ->
-            Log.d(TAG,"UsbMonitor device $index -> ${usbDevice.deviceName}")
-        }
-
-        if (!this.usbMonitor.hasPermission(this.usbCameraDevice)) {
-            Log.e(TAG,"UsbMonitor don't have permission")
-            this.usbMonitor.requestPermission(this.usbCameraDevice)
-        } else {
-            Log.d(TAG,"UsbMonitor has permission")
-            Log.d(TAG, "Usb DeviceId: ${this.usbCameraDevice?.deviceId}")
-
-            try {
-                this.byteBufferStreamList.clear()
-                this.imageReader = KCameraAutoCloseable<ImageReader>(
-                    ImageReader.newInstance(
-                        this.previewSize.width,
-                        this.previewSize.height,
-                        ImageFormat.JPEG,
-                        2
-                    )
-                )
-                if (this.imageReader != null) {
-                    this.imageReader?.get()?.setOnImageAvailableListener(this.imageReaderAvailable, this.backgroundHandler)
-                }
-                this.usbControlBlock = this.usbMonitor.openDevice(this.usbCameraDevice)
-                this.uvcCamera = UVCCamera().apply {
-                    open(this@KUVCCameraSource.usbControlBlock)
-                }
-                Log.d(TAG,"The UVCCamera support size ${this.uvcCamera?.supportedSize}")
-                this.uvcCamera?.setPreviewSize(this.previewSize.width, this.previewSize.height, this.MIN_FPS, this.MAX_FPS, UVCCamera.FRAME_FORMAT_MJPEG, UVCCamera.DEFAULT_BANDWIDTH)
-                this.uvcCamera?.setFrameCallback(this.iFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
-                this.uvcCamera?.setPreviewDisplay(this@KUVCCameraSource.imageReader?.get()?.surface)
-                this.uvcCamera?.startPreview()
-                this.uvcCamera?.updateCameraParams()
-            } catch (e: Exception) {
-                Log.e(TAG,"Open camera error $e")
-            }
-        }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun connectRecorderUVCCamera(fileName: String) {
-        Log.d(TAG,"Connect to the UVC Camera")
-
-        this.usbMonitor.setDeviceFilter(DeviceFilter(this.usbCameraDevice))
-
-        this.usbMonitor.deviceList.forEachIndexed { index, usbDevice ->
-            Log.d(TAG,"UsbMonitor device $index -> ${usbDevice.deviceName}")
-        }
-
-        if (!this.usbMonitor.hasPermission(this.usbCameraDevice)) {
-            Log.e(TAG,"UsbMonitor don't have permission")
-            this.usbMonitor.requestPermission(this.usbCameraDevice)
-        } else {
-            Log.d(TAG,"UsbMonitor has permission")
-            Log.d(TAG, "Usb DeviceId: ${this.usbCameraDevice?.deviceId}")
-
-            try {
-                this.byteBufferStreamList.clear()
-                this.imageReader = KCameraAutoCloseable<ImageReader>(
-                    ImageReader.newInstance(
-                        this.previewSize.width,
-                        this.previewSize.height,
-                        ImageFormat.JPEG,
-                        2
-                    )
-                )
-
-                if (this.imageReader != null) {
-                    this.imageReader?.get()?.setOnImageAvailableListener(this.imageReaderAvailable, this.backgroundHandler)
-                }
-
-                this.mediaRecorder = MediaRecorder(this.context).also { mediaRecorder ->
-                    mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-                    mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE)
-                    mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    mediaRecorder.setOutputFile(fileName)
-                    mediaRecorder.setVideoEncodingBitRate(10000000)
-                    mediaRecorder.setVideoFrameRate(30)
-                    mediaRecorder.setVideoSize(this.previewSize.width, this.previewSize.height)
-                    mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-                    mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                    mediaRecorder.setPreviewDisplay(this@KUVCCameraSource.imageReader?.get()?.surface);
-                }
-
-                try {
-                    this.mediaRecorder?.prepare()
-                } catch (e: IOException) {
-                    e.printStackTrace()
-                }
-
-                this.usbControlBlock = this.usbMonitor.openDevice(this.usbCameraDevice)
-                this.uvcCamera = UVCCamera().apply {
-                    open(this@KUVCCameraSource.usbControlBlock)
-                }
-                Log.d(TAG,"The UVCCamera support size ${this.uvcCamera?.supportedSize}")
-                this.uvcCamera?.setPreviewSize(this.previewSize.width, this.previewSize.height, this.MIN_FPS, this.MAX_FPS, UVCCamera.FRAME_FORMAT_MJPEG, UVCCamera.DEFAULT_BANDWIDTH)
-                this.uvcCamera?.setFrameCallback(this.iFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
-                this.uvcCamera?.setPreviewDisplay(this.mediaRecorder?.surface)
-                this.uvcCamera?.startPreview()
-                this.uvcCamera?.updateCameraParams()
-                this.autoFocus = false
-                this.autoWhiteBalance = true
-
-                this.mediaRecorder?.start()
-            } catch (e: Exception) {
-                Log.e(TAG,"Open camera error $e")
             }
         }
     }
@@ -303,6 +218,30 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
 
     var contrastMin = this.uvcCamera?.contrastMin
         get() = this.uvcCamera?.contrastMin
+
+    var exposure = this.uvcCamera?.exposure
+        get() = this.uvcCamera?.exposure
+        set(value) {
+            field = value
+            value?.let {
+                this.uvcCamera?.exposure = value
+            }
+        }
+
+    var exposureMax = this.uvcCamera?.exposureMax
+        get() = this.uvcCamera?.exposureMax
+
+    var exposureMin = this.uvcCamera?.exposureMin
+        get() = this.uvcCamera?.exposureMin
+
+    var exposureMode = this.uvcCamera?.exposureMode
+        get() = this.uvcCamera?.exposureMode
+        set(value) {
+            field = value
+            value?.let {
+                this.uvcCamera?.exposureMode = value
+            }
+        }
 
     var focus = this.uvcCamera?.focus
         get() = this.uvcCamera?.focus
@@ -424,6 +363,118 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
     var zoomMin = this.uvcCamera?.zoomMin
         get() = this.uvcCamera?.zoomMin
 
+    private fun checkStorageSpace(): Boolean{
+        val internalFreeSpace = this.getInternalFreeSpace()
+        Log.v(TAG, "Free Space: $internalFreeSpace")
+
+        val internalTotalSpace = this.getInternalTotalSpace()
+        Log.v(TAG, "Total Space: $internalTotalSpace")
+
+        val internalUsedSpace = this.getInternalUsedSpace()
+        Log.v(TAG, "Used Space: $internalUsedSpace")
+
+        val nowFreeSpacePercent = 1.0 * internalFreeSpace / internalTotalSpace
+        Log.v(TAG, "Now Free Space percent: $nowFreeSpacePercent")
+
+        if (nowFreeSpacePercent < this.storageSpacePercent) {
+            Log.e(TAG,"Out of disk space, lower than 20%")
+            return false
+        }
+        return true
+    }
+
+    private fun checkUVCCameraPermission() {
+        if (this.usbCameraDevice == null) {
+            Log.e(TAG,"Can't not find UVCCamera on usb device list")
+            return
+        }
+
+        this.context.registerReceiver(this.usbPermissionBroadReceiver, IntentFilter(this.ACTION_USB_PERMISSION))
+        val pendingIntent = PendingIntent.getBroadcast(this.context, 0, Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_MUTABLE)
+        this.usbManager.requestPermission(this.usbCameraDevice, pendingIntent)
+    }
+
+    public fun closeUVCCamera() {
+        this.byteBufferStreamList.clear()
+        this.uvcCamera?.close()
+    }
+
+    private fun connectUVCCamera() {
+        Log.d(TAG,"Connect to the UVC Camera")
+
+        this.usbMonitor.setDeviceFilter(DeviceFilter(this.usbCameraDevice))
+
+        this.usbMonitor.deviceList.forEachIndexed { index, usbDevice ->
+            Log.d(TAG,"UsbMonitor device $index -> ${usbDevice.deviceName}")
+        }
+
+        if (!this.usbMonitor.hasPermission(this.usbCameraDevice)) {
+            Log.e(TAG,"UsbMonitor don't have permission")
+            this.usbMonitor.requestPermission(this.usbCameraDevice)
+        } else {
+            Log.d(TAG,"UsbMonitor has permission")
+            Log.d(TAG, "Usb DeviceId: ${this.usbCameraDevice?.deviceId}")
+
+            try {
+                this.byteBufferStreamList.clear()
+                this.imageReader = KCameraAutoCloseable<ImageReader>(
+                    ImageReader.newInstance(
+                        this.previewSize.width,
+                        this.previewSize.height,
+                        ImageFormat.JPEG,
+                        2
+                    )
+                )
+                if (this.imageReader != null) {
+                    this.imageReader?.get()?.setOnImageAvailableListener(this.imageReaderAvailable, this.backgroundHandler)
+                }
+                this.usbControlBlock = this.usbMonitor.openDevice(this.usbCameraDevice)
+                this.uvcCamera = UVCCamera().apply {
+                    open(this@KUVCCameraSource.usbControlBlock)
+                }
+                Log.d(TAG,"The UVCCamera support size ${this.uvcCamera?.supportedSize}")
+                this.uvcCamera?.setPreviewSize(this.previewSize.width, this.previewSize.height, this.MIN_FPS, this.MAX_FPS, UVCCamera.FRAME_FORMAT_MJPEG, UVCCamera.DEFAULT_BANDWIDTH)
+                this.uvcCamera?.setButtonCallback(this.iButtonCallback)
+                this.uvcCamera?.setStatusCallback(this.iStateCallback)
+                this.uvcCamera?.setFrameCallback(this.iFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
+                this.uvcCamera?.setPreviewDisplay(this@KUVCCameraSource.imageReader?.get()?.surface)
+                this.uvcCamera?.startPreview()
+                this.uvcCamera?.updateCameraParams()
+            } catch (e: Exception) {
+                Log.e(TAG,"Open camera error $e")
+            }
+        }
+    }
+
+    private fun getFileName(): String {
+        val videoFolder = File(this.videoRecordPath)
+        if (!videoFolder.exists()) {
+            Files.createDirectories(Paths.get(this.videoRecordPath));
+        }
+
+        val time = Calendar.getInstance().time
+        val formatter = SimpleDateFormat("yyyy_MM_dd_HH_mm_ss")
+        val current = formatter.format(time)
+        return "${this.videoRecordPath}/$current.mp4"
+    }
+
+    private fun getInternalFreeSpace(): Long {
+        //Get free Bytes...
+        val statFs = StatFs(Environment.getExternalStorageDirectory().path)
+        return statFs.blockSizeLong * statFs.availableBlocksLong
+    }
+
+    private fun getInternalTotalSpace(): Long {
+        //Get total Bytes
+        val statFs = StatFs(Environment.getExternalStorageDirectory().path)
+        return statFs.blockSizeLong * statFs.blockCountLong
+    }
+
+    private fun getInternalUsedSpace(): Long {
+        //Get used Bytes
+        return getInternalTotalSpace() - getInternalFreeSpace()
+    }
+
     private fun getUVCDevice(): UsbDevice? {
         this.usbManager.deviceList.values.forEach { usbDevice ->
             Log.d(TAG,"Kermit UsbDevice -> " +
@@ -441,6 +492,42 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
             }
         }
         return null
+    }
+
+    private fun initialMediaRecord() {
+        if (this.mediaRecorder == null) {
+            this.mediaRecorder = MediaRecorder(this.context)
+        }
+        this.mediaRecorder?.setAudioSource(MediaRecorder.AudioSource.MIC)
+        this.mediaRecorder?.setVideoSource(MediaRecorder.VideoSource.SURFACE)
+        this.mediaRecorder?.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+        this.mediaRecorder?.setVideoEncodingBitRate(10000000)
+        this.mediaRecorder?.setVideoFrameRate(30)
+        this.mediaRecorder?.setVideoSize(this.previewSize.width, this.previewSize.height)
+        this.mediaRecorder?.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+        this.mediaRecorder?.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        this.mediaRecorder?.setPreviewDisplay(this.imageReader?.get()?.surface)
+        when(this.mediaRecordOrientation) {
+            KMediaRecordOrientationType.ORIENTATION_0 -> this.mediaRecorder?.setOrientationHint(0)
+            KMediaRecordOrientationType.ORIENTATION_90 -> this.mediaRecorder?.setOrientationHint(90)
+            KMediaRecordOrientationType.ORIENTATION_180 -> this.mediaRecorder?.setOrientationHint(180)
+            KMediaRecordOrientationType.ORIENTATION_270 -> this.mediaRecorder?.setOrientationHint(270)
+        }
+        if (this.autoRecord) {
+            this.mediaRecorder?.setMaxDuration(this.recordDuration.toInt())
+            this.mediaRecorder?.setOnInfoListener(this.mediaRecorderInfoList)
+            this.mediaRecorder?.setOnErrorListener(this.mediaRecorderErrorList)
+        } else {
+            this.mediaRecorder?.setMaxDuration(0)
+            this.mediaRecorder?.setOnInfoListener(null)
+            this.mediaRecorder?.setOnErrorListener(this.mediaRecorderErrorList)
+        }
+        this.mediaRecorder?.setOutputFile(this.getFileName())
+        try {
+            this.mediaRecorder?.prepare()
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
     }
 
     public fun openUVCCamera(cameraIndex:Int) {
@@ -468,6 +555,10 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
         this.uvcCamera?.resetContrast()
     }
 
+    public fun resetExposure() {
+        this.uvcCamera?.resetExposure()
+    }
+
     public fun resetFocus() {
         this.uvcCamera?.resetFocus()
     }
@@ -492,18 +583,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
         this.uvcCamera?.resetSharpness()
     }
 
-    public fun resetWhiteBlance() {
+    public fun resetWhiteBalance() {
         this.uvcCamera?.resetWhiteBlance()
     }
 
     public fun resetZoom() {
         this.uvcCamera?.resetZoom()
-    }
-
-    @RequiresApi(Build.VERSION_CODES.S)
-    public fun startRecord(fileName: String) {
-        this.closeUVCCamera()
-        this.connectRecorderUVCCamera(fileName)
     }
 
     public fun setCameraCallback(kCameraCallback: KCameraCallback) {
@@ -515,23 +600,73 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
         this.productId = productId
     }
 
+    public fun setFreeSpacePercent( spacePercent:Double = this.DEFAULT_FREE_SPACE_PERCENT) {
+        if (spacePercent > 1.0f || spacePercent < 0.0f) {
+            Log.e(TAG, "The percent need range is in 0.0 - 1.0")
+        } else {
+            this.storageSpacePercent = spacePercent
+        }
+    }
+
+    public fun setMediaRecordOrientation (orientationType: KMediaRecordOrientationType) {
+        this.mediaRecordOrientation = orientationType
+    }
+
     public fun setPreviewSize(width:Int, height:Int) {
         this.previewSize = Size(width, height)
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
-    fun stopRecord() {
-        try {
+    public fun setRecordDuration(millisecond:Int) {
+        this.recordDuration = millisecond
+    }
+
+    public fun setVideoPath (videoPath:String) {
+        this.videoRecordPath = videoPath
+    }
+
+    public fun startRecordVideo() {
+        if (this.checkStorageSpace()) {
+            if (!this.isVideoRecording) {
+                this.uvcCamera?.stopPreview()
+                this.initialMediaRecord()
+                this.startRecording()
+            }
+        }
+    }
+
+    private fun startRecording() {
+        this.uvcCamera?.setPreviewDisplay(this.mediaRecorder?.surface)
+        this.uvcCamera?.setFrameCallback(this.iFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
+        this.uvcCamera?.startPreview()
+        this.mediaRecorder?.start()
+        this.isVideoRecording = true
+    }
+
+    public fun stopRecordVideo() {
+        if (this.isVideoRecording) {
             this.mediaRecorder?.pause()
             this.mediaRecorder?.stop()
             this.mediaRecorder?.reset()
             this.mediaRecorder?.release()
             this.mediaRecorder = null
-            this.cameraIndex?.let { cameraIndex ->
-                this.openUVCCamera(cameraIndex)
-            }
-        } catch (e: IllegalStateException) {
-            Log.e(TAG, "Kermit e: $e")
+            this.isVideoRecording = false
+        }
+        this.uvcCamera?.stopPreview()
+        this.uvcCamera?.setPreviewDisplay(this.imageReader?.get()?.surface)
+        this.uvcCamera?.setFrameCallback(this.iFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
+        this.uvcCamera?.startPreview()
+    }
+
+    private fun waitRecording() {
+        if (this.isVideoRecording) {
+            this.mediaRecorder?.pause()
+            this.mediaRecorder?.stop()
+            this.mediaRecorder?.reset()
+            this.isVideoRecording = false
+            this.uvcCamera?.stopPreview()
+            this.uvcCamera?.setPreviewDisplay(this.imageReader?.get()?.surface)
+            this.uvcCamera?.setFrameCallback(this.iFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
+            this.uvcCamera?.startPreview()
         }
     }
 }
