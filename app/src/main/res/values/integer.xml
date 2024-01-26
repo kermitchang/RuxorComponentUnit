@@ -4,6 +4,8 @@
     <integer name="delay_animation_duration">200</integer>
     <integer name="logitech_c615_vendor_id">1133</integer>
     <integer name="logitech_c615_product_id">2092</integer>
+    <integer name="logitech_brio_pro_vendor_id">1133</integer>
+    <integer name="logitech_brio_pro_product_id">2142</integer>
     <integer name="shenzhen_cam_vendor_id">11391</integer>
     <integer name="shenzhen_cam_product_id">19040</integer>
     <integer name="sonix_cam_vendor_id">3141</integer>

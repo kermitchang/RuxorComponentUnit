@@ -33,11 +33,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
 
     private var backgroundHandler: Handler? = null
     private var byteBufferStreamList =  mutableListOf<ByteArray>()
-    private var kCameraCallback: KCameraCallback ?= null
     private var cameraIndex : Int ?= null
     private var imageReader: KCameraAutoCloseable<ImageReader>? = null
+    private var kCameraCallback: KCameraCallback ?= null
     private var mediaRecorder: MediaRecorder? = null
     private var previewSize = Size(this.DEFAULT_CAMERA_WIDTH, this.DEFAULT_CAMERA_HEIGHT)
+    private var productId = this.context.resources.getInteger(R.integer.logitech_c615_product_id)
     private var usbCameraDevice:UsbDevice ?= null
     private var usbControlBlock: USBMonitor.UsbControlBlock? = null
     private val usbManager: UsbManager = this.context.getSystemService(Context.USB_SERVICE) as UsbManager
@@ -46,9 +47,8 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
     }
     private var uvcCamera: UVCCamera?= null
     private var vendorId = this.context.resources.getInteger(R.integer.logitech_c615_vendor_id)
-    private var productId = this.context.resources.getInteger(R.integer.logitech_c615_product_id)
 
-    private val frameCallback = IFrameCallback { byteBuffer ->
+    private val iFrameCallback = IFrameCallback { byteBuffer ->
 //        Log.d(TAG,"Buffer size: ${byteBuffer?.capacity()}")
 
         byteBuffer?.capacity()?.let { bufSize ->
@@ -160,7 +160,7 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 }
                 Log.d(TAG,"The UVCCamera support size ${this.uvcCamera?.supportedSize}")
                 this.uvcCamera?.setPreviewSize(this.previewSize.width, this.previewSize.height, this.MIN_FPS, this.MAX_FPS, UVCCamera.FRAME_FORMAT_MJPEG, UVCCamera.DEFAULT_BANDWIDTH)
-                this.uvcCamera?.setFrameCallback(this.frameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
+                this.uvcCamera?.setFrameCallback(this.iFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
                 this.uvcCamera?.setPreviewDisplay(this@KUVCCameraSource.imageReader?.get()?.surface)
                 this.uvcCamera?.startPreview()
                 this.uvcCamera?.updateCameraParams()
@@ -227,7 +227,7 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 }
                 Log.d(TAG,"The UVCCamera support size ${this.uvcCamera?.supportedSize}")
                 this.uvcCamera?.setPreviewSize(this.previewSize.width, this.previewSize.height, this.MIN_FPS, this.MAX_FPS, UVCCamera.FRAME_FORMAT_MJPEG, UVCCamera.DEFAULT_BANDWIDTH)
-                this.uvcCamera?.setFrameCallback(this.frameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
+                this.uvcCamera?.setFrameCallback(this.iFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP)
                 this.uvcCamera?.setPreviewDisplay(this.mediaRecorder?.surface)
                 this.uvcCamera?.startPreview()
                 this.uvcCamera?.updateCameraParams()
@@ -259,6 +259,21 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
             }
         }
 
+    var backlight = this.uvcCamera?.backlight
+        get() = this.uvcCamera?.backlight
+        set(value) {
+            field = value
+            value?.let {
+                this.uvcCamera?.backlight = value
+            }
+        }
+
+    var backlightMax = this.uvcCamera?.backlightMax
+        get() = this.uvcCamera?.backlightMax
+
+    var backlightMin = this.uvcCamera?.backlightMin
+        get() = this.uvcCamera?.backlightMin
+
     var brightness = this.uvcCamera?.brightness
         get() = this.uvcCamera?.brightness
         set(value) {
@@ -267,6 +282,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 this.uvcCamera?.brightness = value
             }
         }
+
+    var brightnessMax = this.uvcCamera?.brightnessMax
+        get() = this.uvcCamera?.brightnessMax
+
+    var brightnessMin = this.uvcCamera?.brightnessMin
+        get() = this.uvcCamera?.brightnessMin
 
     var contrast = this.uvcCamera?.contrast
         get() = this.uvcCamera?.contrast
@@ -277,6 +298,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
             }
         }
 
+    var contrastMax = this.uvcCamera?.contrastMax
+        get() = this.uvcCamera?.contrastMax
+
+    var contrastMin = this.uvcCamera?.contrastMin
+        get() = this.uvcCamera?.contrastMin
+
     var focus = this.uvcCamera?.focus
         get() = this.uvcCamera?.focus
         set(value) {
@@ -285,6 +312,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 this.uvcCamera?.focus = value
             }
         }
+
+    var focusMax = this.uvcCamera?.focusMax
+        get() = this.uvcCamera?.focusMax
+
+    var focusMin = this.uvcCamera?.focusMin
+        get() = this.uvcCamera?.focusMin
 
     var gain = this.uvcCamera?.gain
         get() = this.uvcCamera?.gain
@@ -295,6 +328,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
             }
         }
 
+    var gainMax = this.uvcCamera?.gainMax
+        get() = this.uvcCamera?.gainMax
+
+    var gainMin = this.uvcCamera?.gainMin
+        get() = this.uvcCamera?.gainMin
+
     var gamma = this.uvcCamera?.gamma
         get() = this.uvcCamera?.gamma
         set(value) {
@@ -303,6 +342,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 this.uvcCamera?.gamma = value
             }
         }
+
+    var gammaMax = this.uvcCamera?.gammaMax
+        get() = this.uvcCamera?.gammaMax
+
+    var gammaMin = this.uvcCamera?.gammaMin
+        get() = this.uvcCamera?.gammaMin
 
     var hue = this.uvcCamera?.hue
         get() = this.uvcCamera?.hue
@@ -313,6 +358,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
             }
         }
 
+    var hueMax = this.uvcCamera?.hueMax
+        get() = this.uvcCamera?.hueMax
+
+    var hueMin = this.uvcCamera?.hueMin
+        get() = this.uvcCamera?.hueMin
+
     var saturation = this.uvcCamera?.saturation
         get() = this.uvcCamera?.saturation
         set(value) {
@@ -321,6 +372,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 this.uvcCamera?.saturation = value
             }
         }
+
+    var saturationMax = this.uvcCamera?.saturationMax
+        get() = this.uvcCamera?.saturationMax
+
+    var saturationMin = this.uvcCamera?.saturationMin
+        get() = this.uvcCamera?.saturationMin
 
     var sharpness = this.uvcCamera?.sharpness
         get() = this.uvcCamera?.sharpness
@@ -331,7 +388,13 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
             }
         }
 
-    var whiteBlance = this.uvcCamera?.whiteBlance
+    var sharpnessMax = this.uvcCamera?.sharpnessMax
+        get() = this.uvcCamera?.sharpnessMax
+
+    var sharpnessMin = this.uvcCamera?.sharpnessMin
+        get() = this.uvcCamera?.sharpnessMin
+
+    var whiteBalance = this.uvcCamera?.whiteBlance
         get() = this.uvcCamera?.whiteBlance
         set(value) {
             field = value
@@ -339,6 +402,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 this.uvcCamera?.whiteBlance = value
             }
         }
+
+    var whiteBalanceMax = this.uvcCamera?.whiteBlanceMax
+        get() = this.uvcCamera?.whiteBlanceMax
+
+    var whiteBalanceMin = this.uvcCamera?.whiteBlanceMin
+        get() = this.uvcCamera?. whiteBlanceMin
 
     var zoom = this.uvcCamera?.zoom
         get() = this.uvcCamera?.zoom
@@ -348,6 +417,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
                 this.uvcCamera?.zoom = value
             }
         }
+
+    var zoomMax = this.uvcCamera?.zoomMax
+        get() = this.uvcCamera?.zoomMax
+
+    var zoomMin = this.uvcCamera?.zoomMin
+        get() = this.uvcCamera?.zoomMin
 
     private fun getUVCDevice(): UsbDevice? {
         this.usbManager.deviceList.values.forEach { usbDevice ->
@@ -379,6 +454,10 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
         else {
             this.connectUVCCamera()
         }
+    }
+
+    public fun resetBacklight() {
+        this.uvcCamera?.resetBacklight()
     }
 
     public fun resetBrightness() {
@@ -421,29 +500,27 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
         this.uvcCamera?.resetZoom()
     }
 
-    public fun setPreviewSize(width:Int, height:Int) {
-        this.previewSize = Size(width, height)
-    }
-
-    public fun setCameraID (vendorId:Int, productId:Int) {
-        this.vendorId = vendorId
-        this.productId = productId
+    @RequiresApi(Build.VERSION_CODES.S)
+    public fun startRecord(fileName: String) {
+        this.closeUVCCamera()
+        this.connectRecorderUVCCamera(fileName)
     }
 
     public fun setCameraCallback(kCameraCallback: KCameraCallback) {
         this.kCameraCallback = kCameraCallback;
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
-    public fun startRecord(fileName: String) {
-        Log.d(TAG, "Kermit startRecordingVideo")
-        this.closeUVCCamera()
-        this.connectRecorderUVCCamera(fileName)
+    public fun setCameraID(vendorId:Int, productId:Int) {
+        this.vendorId = vendorId
+        this.productId = productId
+    }
+
+    public fun setPreviewSize(width:Int, height:Int) {
+        this.previewSize = Size(width, height)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun stopRecord() {
-        Log.d(TAG, "Kermit stopRecordingVideo")
         try {
             this.mediaRecorder?.pause()
             this.mediaRecorder?.stop()
