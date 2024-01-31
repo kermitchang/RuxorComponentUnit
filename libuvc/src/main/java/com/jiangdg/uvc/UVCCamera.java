@@ -1215,7 +1215,7 @@ public class UVCCamera {
 
 	public synchronized void resetHue() {
 		if (mNativePtr != 0) {
-			nativeSetHue(mNativePtr, mSaturationDef);
+			nativeSetHue(mNativePtr, mHueDef);
 		}
 	}
 

@@ -44,6 +44,7 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
     private val DEFAULT_CAMERA_WIDTH = 1920
     private val DEFAULT_FREE_SPACE_PERCENT = 0.2
     private val DEFAULT_RECORD_DURATION = (15 * 60 * 1000).toInt()
+    private val DEFAULT_RECORD_SIZE = (4.0 * 1024 * 1024 * 1024).toLong()
     private val MAX_FPS = 60
     private val MIN_FPS = 1
 
@@ -59,6 +60,7 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
     private var previewSize = Size(this.DEFAULT_CAMERA_WIDTH, this.DEFAULT_CAMERA_HEIGHT)
     private var productId = this.context.resources.getInteger(R.integer.logitech_c615_product_id)
     private var recordDuration = this.DEFAULT_RECORD_DURATION
+    private var recordLimitSize = this.DEFAULT_RECORD_SIZE
     private var storageSpacePercent = this.DEFAULT_FREE_SPACE_PERCENT
     private var usbCameraDevice:UsbDevice ?= null
     private var usbControlBlock: USBMonitor.UsbControlBlock? = null
@@ -395,8 +397,12 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
     }
 
     public fun closeUVCCamera() {
+        if (this.isVideoRecording)
+            this.stopRecordVideo()
         this.byteBufferStreamList.clear()
         this.uvcCamera?.close()
+        this.usbControlBlock?.close()
+        this.usbMonitor.unregister()
     }
 
     private fun connectUVCCamera() {
@@ -507,6 +513,7 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
         this.mediaRecorder?.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
         this.mediaRecorder?.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
         this.mediaRecorder?.setPreviewDisplay(this.imageReader?.get()?.surface)
+        this.mediaRecorder?.setMaxFileSize(this.recordLimitSize)
         when(this.mediaRecordOrientation) {
             KMediaRecordOrientationType.ORIENTATION_0 -> this.mediaRecorder?.setOrientationHint(0)
             KMediaRecordOrientationType.ORIENTATION_90 -> this.mediaRecorder?.setOrientationHint(90)
@@ -618,6 +625,10 @@ class KUVCCameraSource(private val context: Context) : KBaseObject() {
 
     public fun setRecordDuration(millisecond:Int) {
         this.recordDuration = millisecond
+    }
+
+    public fun setRecordLimitSize(bytes:Long) {
+        this.recordLimitSize = bytes
     }
 
     public fun setVideoPath (videoPath:String) {
