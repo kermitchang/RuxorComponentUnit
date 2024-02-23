@@ -1,4 +1,4 @@
-package com.ruxor.ruxorcomponentunit.component.usbserialport
+package com.ruxor.ruxorcomponentunit.component.usb
 
 import android.hardware.usb.UsbDevice
 

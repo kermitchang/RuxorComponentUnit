@@ -11,7 +11,7 @@ android {
 	}
 
     defaultConfig {
-        minSdkVersion 26
+        minSdkVersion 29
 		targetSdkVersion 34
     }
 
@@ -38,8 +38,7 @@ tasks.withType(JavaCompile) {
 }
 
 String getNdkBuildPath() {
-	// def ndkBuildingDir = System.getenv("NDK_HOME")
-	def ndkBuildingDir = "/Users/kunhsuanchang/Library/Android/sdk/ndk/26.1.10909125"
+	def ndkBuildingDir = System.getenv("NDK_HOME")
 	if (ndkBuildingDir==null || ndkBuildingDir.isEmpty()) {
 		Properties properties = new Properties()
 		properties.load(project.rootProject.file('local.properties').newDataInputStream())
@@ -49,7 +48,8 @@ String getNdkBuildPath() {
 	if (Os.isFamily(Os.FAMILY_WINDOWS)) {
 		ndkBuildPath = ndkBuildingDir + '/ndk-build.cmd'
 	} else {
-		ndkBuildPath = ndkBuildingDir + '/ndk-build'
+		def ndkVersion = "26.1.10909125"
+		ndkBuildPath = ndkBuildingDir + "/" + ndkVersion + '/ndk-build'
 	}
 	return ndkBuildPath
 }
@@ -57,8 +57,6 @@ String getNdkBuildPath() {
 task ndkBuild(type: Exec, description: 'Compile JNI source via NDK') {
 	println('executing ndkBuild')
 	def ndkBuildPath = getNdkBuildPath();
-	println("Kermit")
-	println(ndkBuildPath)
 	commandLine ndkBuildPath, '-j8', '-C', file('src/main').absolutePath
 }
 
@@ -74,5 +72,4 @@ dependencies {
     implementation fileTree(dir: new File(buildDir, 'libs'), include: '*.jar')
 	implementation "androidx.appcompat:appcompat:1.6.1"
 	implementation 'com.elvishew:xlog:1.11.0'
-//	implementation project(path: ':libuvccommon')
 }

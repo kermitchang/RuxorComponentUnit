@@ -18,3 +18,4 @@ rootProject.name = "RuxorComponentUnit"
 include(":app")
 include(":libuvc")
 include(":libYuvProcess")
+include(":libSerialPort")

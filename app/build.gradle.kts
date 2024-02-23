@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.ruxor.ruxorcomponentunit"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -69,4 +69,5 @@ dependencies {
     implementation("com.github.mik3y:usb-serial-for-android:3.7.0")
     implementation(project(":libuvc"))
     implementation(project(":libYuvProcess"))
+    implementation(project(":libSerialPort"))
 }
